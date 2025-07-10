@@ -1,3 +1,6 @@
+July 10 2025
+* Keyfactor.Common `2.9.0` added
+
 June 02 2025
 * Packages were removed due to signing vulnerabilites. A certificate was revoked due to an administrative error, invalidating the signatures on the following releases. This is flagged in code scanning utilites, but was not the result of any actual compromise of the signing key or codesigning process.
     * Keyfactor.Orchestrators.Common `3.0.0`
