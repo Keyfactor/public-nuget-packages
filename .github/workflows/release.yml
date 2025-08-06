@@ -1,0 +1,38 @@
+name: Build
+
+on:
+  push:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts  # Download artifacts to this directory
+
+      - name: Create package.json
+        run: |
+          echo '{"version": "1.0.0"}' > package.json
+
+      - name: Install dependencies
+        run: npm install --save-dev semantic-release @semantic-release/git @semantic-release/changelog
+
+      # - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
+      #   run: npm audit signatures
+
+      # Create a new release using the rules in .releaserc.yml
+      - name: Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+        if: github.ref == 'refs/heads/main'
