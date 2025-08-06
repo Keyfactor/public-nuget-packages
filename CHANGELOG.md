@@ -1,3 +1,10 @@
+# 1.0.0 (2025-08-06)
+
+
+### Features
+
+* **ci:** Add semver release CI ([aa775ec](https://github.com/Keyfactor/public-nuget-packages/commit/aa775ec6bc2bbbe52daf7043d1491691933b3ebc))
+
 July 10 2025
 * Keyfactor.Common `2.9.0` added
 
