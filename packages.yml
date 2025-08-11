@@ -1,0 +1,104 @@
+---
+packages:
+  - name: Keyfactor.Logging
+    versions:
+      - 1.0.0
+      - 1.1.0
+      - 1.1.1
+      - 1.1.2
+      - 1.2.0
+      - 1.3.0
+  - name: Keyfactor.Orchestrators.Common
+    versions:
+      - 2.3.6
+      - 2.3.7
+      - 2.4.1
+      - 2.5.0
+      - 2.9.0
+      - 3.0.0
+      - 3.1.0
+      - 3.1.1
+      - 3.1.2
+      - 3.2.0
+  #      - 3.3.0
+  - name: Keyfactor.Orchestrators.IOrchestratorJobExtensions
+    versions:
+      - 1.0.0
+  - name: Keyfactor.PKI
+    versions:
+      - 4.0.1
+      - 3.2.0
+      - 3.4.7
+      - 3.4.8
+      - 5.0.0
+      - 5.5.0
+      - 5.7.0
+      - 6.3.0
+      - 7.8.0
+      - 8.1.0
+      - 8.1.1
+  #      - 8.3.0
+  - name: Keyfactor.Orchestrators.IOrchestratorRegistrationUpdater
+    versions:
+      - 1.0.2
+      - 1.0.3
+  - name: Keyfactor.Common
+    versions:
+      - 2.3.6
+      - 2.3.7
+      - 2.4.1
+      - 2.5.0
+      - 2.8.0
+      - 2.8.1
+      - 2.8.2
+      - 2.9.0
+  - name: Keyfactor.AnyGateway.IAnyCAPlugin
+    versions:
+      - 2.0.0
+      - 3.0.0
+      - 3.1.0
+  #      - 3.2.0
+  - name: Keyfactor.Platform.IPAMProvider
+    versions:
+      - 1.0.0
+  - name: Keyfactor.Extensions.Pam.Utilities
+    versions:
+      - 1.0.0
+      - 1.0.1
+      - 1.0.2
+  - name: Keyfactor.Platform.IOrchestratorRegistrationHandler
+    versions:
+      - 2.0.0
+      - 2.0.0.1 #weird version, but this is how it was released
+      - 3.0.0
+  - name: Keyfactor.Orchestrators.ISslJobExtension
+    versions:
+      - 1.0.0
+      - 1.0.1
+      - 1.0.2
+      - 1.0.3
+      - 1.0.4
+  - name: Keyfactor.Workflows.IWorkflowStep
+    versions:
+      - 1.0.0
+      - 1.1.0
+      - 2.0.0
+      - 2.0.1
+      - 2.1.0
+      - 2.2.0
+      - 2.3.0
+      - 2.4.0
+      - 2.5.0
+  - name: Keyfactor.Workflows
+    versions:
+      - 1.0.0
+      - 1.1.0
+      - 2.0.0
+      - 2.1.0
+      - 2.2.0
+      - 2.3.0
+      - 2.4.0
+      - 2.5.0
+  - name: Keyfactor.Platform.IOrchestratorJobCompleteHandler
+    versions:
+      - 1.0.0.1
