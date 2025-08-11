@@ -8,8 +8,8 @@ class NuGetSyncer:
         self.NUGET_FEED_URL = "https://pkgs.dev.azure.com/Keyfactor/_packaging/KeyfactorPackages/nuget/v3/index.json"
         self.GITHUB_NUGET_URL = "https://nuget.pkg.github.com/keyfactor/index.json"
         self.GITHUB_TOKEN = os.getenv("GH_NUGET_TOKEN", os.getenv("GITHUB_TOKEN"))
-        self.TMP_DIR = "../nupkgs"
-        self.PACKAGES_YML = "../packages.yml"
+        self.TMP_DIR = "nupkgs"
+        self.PACKAGES_YML = "packages.yml"
         self.allowed_packages = self.load_allowed_packages()
         os.makedirs(self.TMP_DIR, exist_ok=True)
 
