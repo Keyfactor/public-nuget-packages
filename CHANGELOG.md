@@ -1,3 +1,12 @@
+# [1.1.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.0.0...v1.1.0) (2025-08-11)
+
+
+### Features
+
+* **ci:** Add CICD code to run sync in GitHub actions ([2080e31](https://github.com/Keyfactor/public-nuget-packages/commit/2080e314e38f9f35f50aff059ec70962c6b367ea))
+* **repo:** Add tf code for adding PATs to secrets ([3759afd](https://github.com/Keyfactor/public-nuget-packages/commit/3759afdd3a685f14c74c03bed84cd0ae112f2402))
+* **scripts:** Add scripts to pull and push nuget packages from Engineering Devops Nuget to Keyfactor GitHub Nuget. ([f724b5a](https://github.com/Keyfactor/public-nuget-packages/commit/f724b5afd75328a82c078f44cd53e1b970ef5d9f))
+
 # 1.0.0 (2025-08-06)
 
 
