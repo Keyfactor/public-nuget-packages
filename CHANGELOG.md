@@ -1,3 +1,12 @@
+## [1.1.2](https://github.com/Keyfactor/public-nuget-packages/compare/v1.1.1...v1.1.2) (2025-08-11)
+
+
+### Bug Fixes
+
+* **ci:** Fix nugetconfig that gets generated in the action ([f8dd3d7](https://github.com/Keyfactor/public-nuget-packages/commit/f8dd3d78fc6ef5703a93436cf1f18874e3d02faf))
+* **ci:** Fix nugetconfig that gets generated in the action ([260b3f7](https://github.com/Keyfactor/public-nuget-packages/commit/260b3f77595698d68284a29222db1c3f8fce5a8e))
+* **ci:** Install mono to call nuget ([2f5cdd4](https://github.com/Keyfactor/public-nuget-packages/commit/2f5cdd42a96df83339bc9db19def5ba86c670d8a))
+
 ## [1.1.1](https://github.com/Keyfactor/public-nuget-packages/compare/v1.1.0...v1.1.1) (2025-08-11)
 
 
