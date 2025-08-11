@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/Keyfactor/public-nuget-packages/compare/v1.1.0...v1.1.1) (2025-08-11)
+
+
+### Bug Fixes
+
+* **scripts:** Update paths for tmp and packages.yml to run in root dir rather than scripts dir. ([2843a83](https://github.com/Keyfactor/public-nuget-packages/commit/2843a832fe19254a2b020e5da2b21b69aa0668cb))
+
 # [1.1.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.0.0...v1.1.0) (2025-08-11)
 
 
