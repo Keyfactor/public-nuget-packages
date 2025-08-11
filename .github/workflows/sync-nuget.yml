@@ -54,5 +54,5 @@ jobs:
       - name: Run NuGet sync script
         run: python scripts/sync_nuget.py
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_NUGET_TOKEN }}
           # Add any other environment variables needed by your script
