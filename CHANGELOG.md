@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/Keyfactor/public-nuget-packages/compare/v1.1.2...v1.1.3) (2026-01-15)
+
+
+### Bug Fixes
+
+* **pkg:** Add `Keyfactor.Orchestrators.Common v3.3.0` and `Keyfactor.PKI v8.2.2` ([d7e14b9](https://github.com/Keyfactor/public-nuget-packages/commit/d7e14b9a060413c2ba1b67cdd836099bf0e76370))
+
 ## [1.1.2](https://github.com/Keyfactor/public-nuget-packages/compare/v1.1.1...v1.1.2) (2025-08-11)
 
 
