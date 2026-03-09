@@ -16,6 +16,7 @@ Environment variables:
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import click
@@ -266,6 +267,7 @@ class NuGetSyncer:
             click.echo("\nFailed versions:")
             for entry in failures:
                 click.echo(f"  - {entry}")
+            sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
