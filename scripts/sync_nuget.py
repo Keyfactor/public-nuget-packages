@@ -239,7 +239,8 @@ class NuGetSyncer:
             return
 
         click.echo(f"Syncing: {[p.get('name') for p in self.allowed_packages]}")
-        skipped = successful = failed = 0
+        skipped = successful = 0
+        failures: list[str] = []
 
         for pkg in self.allowed_packages:
             name: str = pkg.get("name", "")
@@ -255,12 +256,16 @@ class NuGetSyncer:
                     if self.upload_to_github(package_file):
                         successful += 1
                     else:
-                        failed += 1
+                        failures.append(f"{name} {version}")
                 except Exception as e:
                     click.echo(f"Failed to sync {name} {version}: {e}", err=True)
-                    failed += 1
+                    failures.append(f"{name} {version}")
 
-        click.echo(f"\nSync summary:\n  Uploaded: {successful}\n  Skipped:  {skipped}\n  Failed:   {failed}")
+        click.echo(f"\nSync summary:\n  Uploaded: {successful}\n  Skipped:  {skipped}\n  Failed:   {len(failures)}")
+        if failures:
+            click.echo("\nFailed versions:")
+            for entry in failures:
+                click.echo(f"  - {entry}")
 
 
 # ---------------------------------------------------------------------------
