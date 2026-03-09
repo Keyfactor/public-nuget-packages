@@ -92,7 +92,9 @@ class NuGetSyncer:
                 "-DirectDownload",
                 "-ConfigFile", config_path,
             ]
-            subprocess.run(cmd, check=True)
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            if result.stdout:
+                print(result.stdout)
             # Find the downloaded .nupkg file
             pkg_dir = os.path.join(self.TMP_DIR, f"{name}.{version}")
             for file in os.listdir(pkg_dir):
@@ -198,6 +200,13 @@ class NuGetSyncer:
                             successful += 1
                         else:
                             failed += 1
+                except subprocess.CalledProcessError as e:
+                    print(f"Failed to sync {pkg_name} {version}: exit code {e.returncode}")
+                    if e.stdout:
+                        print(e.stdout)
+                    if e.stderr:
+                        print(e.stderr)
+                    failed += 1
                 except Exception as e:
                     print(f"Failed to sync {pkg_name} {version}: {e}")
                     failed += 1
