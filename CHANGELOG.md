@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.1.3...v1.2.0) (2026-03-09)
+
+
+### Features
+
+* Update packages ([4d9a32a](https://github.com/Keyfactor/public-nuget-packages/commit/4d9a32a09680c5a20e0e0b5842d6655ef2f8f153))
+
 ## [1.1.3](https://github.com/Keyfactor/public-nuget-packages/compare/v1.1.2...v1.1.3) (2026-01-15)
 
 
