@@ -7,6 +7,10 @@ on:
   workflow_dispatch:
     # Allow manual triggering
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   sync-packages:
     runs-on: ubuntu-latest
@@ -55,7 +59,7 @@ jobs:
           pip install -e .
 
       - name: Run NuGet sync script
-        run: python scripts/sync_nuget.py
+        run: python scripts/sync_nuget.py sync packages.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GH_NUGET_TOKEN }}
           AZ_DEVOPS_PAT: ${{ secrets.AZ_DEVOPS_PAT }}

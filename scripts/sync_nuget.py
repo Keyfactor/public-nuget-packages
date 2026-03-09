@@ -2,42 +2,35 @@ import os
 import shutil
 import subprocess
 import tempfile
+import click
 import requests
 import yaml
 
 class NuGetSyncer:
-    def __init__(self):
+    def __init__(self, packages_file, package_filter=None):
         self.NUGET_FEED_URL = "https://pkgs.dev.azure.com/Keyfactor/_packaging/KeyfactorPackages/nuget/v3/index.json"
         self.GITHUB_NUGET_URL = "https://nuget.pkg.github.com/keyfactor/index.json"
         self.GITHUB_TOKEN = os.getenv("GH_NUGET_TOKEN", os.getenv("GITHUB_TOKEN"))
         self.AZ_DEVOPS_PAT = os.getenv("AZ_DEVOPS_PAT")
         self.TMP_DIR = "nupkgs"
-        self.PACKAGES_YML = "packages.yml"
         self.GITHUB_NUGET_BASE = "https://nuget.pkg.github.com/keyfactor"
-        self.allowed_packages = self.load_allowed_packages()
+        self.package_filter = package_filter
+        self.allowed_packages = self.load_allowed_packages(packages_file)
         self._github_versions_cache = {}
         os.makedirs(self.TMP_DIR, exist_ok=True)
 
-    def load_allowed_packages(self):
+    def load_allowed_packages(self, packages_file):
         try:
-            with open(self.PACKAGES_YML, 'r') as file:
-                yaml_data = yaml.safe_load(file)
-                return yaml_data.get('packages', [])
+            with open(packages_file, 'r') as f:
+                packages = yaml.safe_load(f).get('packages', []) or []
         except Exception as e:
-            print(f"Error loading packages.yml: {e}")
-            return set()
-
-    def get_all_packages_and_versions(self):
-        # This function should be implemented to get all allowed packages and their versions
-        # For now, let's assume you have a list of versions for each package in packages.yml
-        # You can extend this to read from example_versions.json or another source
-        # Example: { 'PackageA': ['1.0.0', '2.0.0'], ... }
-        # For demonstration, we'll just return the allowed packages with no versions
-        if isinstance(self.allowed_packages, str):
-            return f"{self.allowed_packages}".split(",")
-        elif isinstance(self.allowed_packages, list) or isinstance(self.allowed_packages, set):
-            return self.allowed_packages
-        return {pkg: [] for pkg in self.allowed_packages}
+            click.echo(f"Error loading {packages_file}: {e}", err=True)
+            return []
+        if self.package_filter:
+            packages = [p for p in packages if p.get('name', '').lower() == self.package_filter.lower()]
+            if not packages:
+                raise click.BadParameter(f"Package '{self.package_filter}' not found in {packages_file}")
+        return packages
 
     def get_github_published_versions(self, name):
         """Fetch the list of versions already published to GitHub Packages for a given package."""
@@ -176,14 +169,13 @@ class NuGetSyncer:
 
     def sync_packages(self):
         if not self.allowed_packages:
-            print("No packages specified in packages.yml. Nothing to sync.")
+            click.echo("No packages specified. Nothing to sync.")
             return
-        print(f"Will sync the following packages: {self.allowed_packages}")
-        packages_and_versions = self.get_all_packages_and_versions()
+        click.echo(f"Will sync the following packages: {[p.get('name', p) for p in self.allowed_packages]}")
         skipped = 0
         successful = 0
         failed = 0
-        for pkg in packages_and_versions:
+        for pkg in self.allowed_packages:
             pkg_name = pkg.get('name', pkg)
             versions = pkg.get('versions', [])
             published = self.get_github_published_versions(pkg_name)
@@ -216,11 +208,143 @@ class NuGetSyncer:
         print(f"  Skipped:   {skipped}")
         print(f"  Failed:    {failed}")
 
-if __name__ == "__main__":
-    syncer = NuGetSyncer()
+AZDO_FEED_BASE = "https://pkgs.dev.azure.com/Keyfactor/_packaging/KeyfactorPackages/nuget/v3/flat2"
 
-    # Option 1: Download and upload packages from packages.yml
+
+def _validate_versions(name, versions, az_pat):
+    """Check that each version exists in the Azure DevOps feed."""
+    resp = requests.get(
+        f"{AZDO_FEED_BASE}/{name.lower()}/index.json",
+        auth=("any", az_pat),
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        raise click.ClickException(f"Package '{name}' not found in Azure DevOps feed.")
+    available = set(resp.json().get("versions", []))
+    missing = [v for v in versions if v not in available]
+    if missing:
+        raise click.ClickException(
+            f"Version(s) not found in Azure DevOps feed: {', '.join(missing)}\n"
+            f"Available: {', '.join(sorted(available))}"
+        )
+
+
+def _write_versions_to_file(packages_file, name, versions):
+    """
+    Insert versions into packages_file using line-based editing to preserve
+    all comments and formatting. Returns (added, skipped) version lists.
+    """
+    with open(packages_file, 'r') as f:
+        lines = f.readlines()
+
+    # Parse current state to know which versions already exist
+    with open(packages_file, 'r') as f:
+        data = yaml.safe_load(f)
+    packages = data.get('packages') or []
+    existing = next((p for p in packages if p.get('name', '').lower() == name.lower()), None)
+
+    already_present = {str(v) for v in existing.get('versions', [])} if existing else set()
+    to_add = [v for v in versions if v not in already_present]
+    skipped = [v for v in versions if v in already_present]
+
+    if not to_add:
+        return [], skipped
+
+    if existing:
+        # Find the last version line for this package and insert after it.
+        # Locate the `- name: <name>` line first.
+        pkg_line = next(
+            (i for i, l in enumerate(lines) if l.strip().lstrip('- ').startswith(f'name: {name}')),
+            None,
+        )
+        if pkg_line is None:
+            raise click.ClickException(f"Could not locate '{name}' in {packages_file}.")
+
+        # Walk forward to find the last `- <version>` line inside this package block.
+        last_ver_line = None
+        ver_indent = None
+        in_versions = False
+        for i in range(pkg_line + 1, len(lines)):
+            stripped = lines[i].strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if stripped == 'versions:':
+                in_versions = True
+                continue
+            if in_versions:
+                if stripped.startswith('- ') and not stripped.startswith('- name:'):
+                    last_ver_line = i
+                    ver_indent = len(lines[i]) - len(lines[i].lstrip())
+                else:
+                    break  # hit next key or next package
+            elif stripped.startswith('- name:'):
+                break  # hit next package without finding versions
+
+        if last_ver_line is None:
+            raise click.ClickException(f"Could not find versions block for '{name}'.")
+
+        for v in reversed(to_add):
+            lines.insert(last_ver_line + 1, ' ' * ver_indent + f'- {v}\n')
+    else:
+        # Append new package block at the end of the file.
+        if lines and not lines[-1].endswith('\n'):
+            lines.append('\n')
+        lines.append(f'  - name: {name}\n')
+        lines.append(f'    versions:\n')
+        for v in to_add:
+            lines.append(f'      - {v}\n')
+
+    with open(packages_file, 'w') as f:
+        f.writelines(lines)
+
+    return to_add, skipped
+
+
+@click.group()
+def cli():
+    """Manage NuGet package sync between Azure DevOps and GitHub Packages."""
+    pass
+
+
+@cli.command()
+@click.argument("packages_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--package", default=None, help="Sync only this package name (must exist in the packages file).")
+def sync(packages_file, package):
+    """Sync packages from Azure DevOps to GitHub Packages."""
+    syncer = NuGetSyncer(packages_file, package_filter=package)
     syncer.sync_packages()
 
-    # Option 2: Upload all existing packages in nupkgs directory
-    # syncer.upload_all_packages_to_github()
+
+@cli.command()
+@click.argument("packages_file", type=click.Path(dir_okay=False))
+@click.argument("name")
+@click.argument("versions", nargs=-1, required=True)
+@click.option("--skip-validate", is_flag=True, default=False,
+              help="Skip Azure DevOps feed validation.")
+def register(packages_file, name, versions, skip_validate):
+    """Add NAME with one or more VERSIONS to PACKAGES_FILE.
+
+    Validates each version exists in the Azure DevOps feed before writing.
+    Requires AZ_DEVOPS_PAT env var unless --skip-validate is set.
+    """
+    if not skip_validate:
+        az_pat = os.getenv("AZ_DEVOPS_PAT")
+        if not az_pat:
+            raise click.ClickException(
+                "AZ_DEVOPS_PAT env var is required for validation. Use --skip-validate to bypass."
+            )
+        click.echo(f"Validating {name} against Azure DevOps feed...")
+        _validate_versions(name, versions, az_pat)
+
+    added, skipped = _write_versions_to_file(packages_file, name, versions)
+
+    if added:
+        click.echo(f"Registered {name}: {', '.join(added)}")
+    if skipped:
+        click.echo(f"Already in {packages_file}, skipped: {', '.join(skipped)}")
+    if not added and not skipped:
+        click.echo("Nothing to register.")
+
+
+if __name__ == "__main__":
+    cli()

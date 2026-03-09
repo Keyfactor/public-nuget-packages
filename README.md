@@ -31,15 +31,44 @@ export GITHUB_TOKEN=<GitHub PAT with write:packages permission>
 export GITHUB_ORG=keyfactor
 ```
 
-2. Install dependencies and run:
+2. Install dependencies:
 
 ```bash
 python -m venv venv && source venv/bin/activate
 pip install -e .
-source .env && python scripts/sync_nuget.py
 ```
 
-The script queries the GitHub Package Registry first and skips any versions already published.
+#### CLI Reference
+
+The sync script is a CLI with two commands:
+
+**`sync`** — Download and upload packages defined in a packages file. Skips versions already published to the GitHub Package Registry.
+
+```bash
+# Sync all packages
+source .env && python scripts/sync_nuget.py sync packages.yml
+
+# Sync a single package
+source .env && python scripts/sync_nuget.py sync packages.yml --package Keyfactor.PKI
+```
+
+**`register`** — Add a package and version(s) to a packages file. Validates that each version exists in the Azure DevOps feed before writing.
+
+```bash
+# Register a new version of an existing package
+source .env && python scripts/sync_nuget.py register packages.yml Keyfactor.PKI 8.4.0
+
+# Register multiple versions at once
+source .env && python scripts/sync_nuget.py register packages.yml Keyfactor.PKI 8.4.0 8.5.0
+
+# Register a brand new package
+source .env && python scripts/sync_nuget.py register packages.yml Keyfactor.NewPackage 1.0.0
+
+# Skip Azure DevOps feed validation
+python scripts/sync_nuget.py register packages.yml Keyfactor.PKI 8.4.0 --skip-validate
+```
+
+After registering, run `sync` to push the new version(s) to the GitHub Package Registry.
 
 ### Manually using dotnet CLI
 
