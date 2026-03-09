@@ -16,7 +16,7 @@ Environment variables:
 
 import os
 import subprocess
-from typing import Optional
+from pathlib import Path
 
 import click
 import requests
@@ -26,7 +26,6 @@ import yaml
 # Constants
 # ---------------------------------------------------------------------------
 
-_AZDO_FEED_INDEX = "https://pkgs.dev.azure.com/Keyfactor/_packaging/KeyfactorPackages/nuget/v3/index.json"
 _AZDO_FEED_BASE = "https://pkgs.dev.azure.com/Keyfactor/_packaging/KeyfactorPackages/nuget/v3/flat2"
 _GITHUB_NUGET_BASE = "https://nuget.pkg.github.com/keyfactor"
 _GITHUB_NUGET_PUSH_URL = "https://nuget.pkg.github.com/keyfactor/index.json"
@@ -41,16 +40,14 @@ class NuGetSyncer:
     """Orchestrates downloading packages from Azure DevOps and publishing them to GitHub Packages.
 
     Attributes:
-        NUGET_FEED_URL:   NuGet v3 service index URL for the Azure DevOps feed.
-        GITHUB_NUGET_URL: NuGet push endpoint for the GitHub Package Registry.
-        GITHUB_TOKEN:     GitHub PAT used to authenticate pushes and version queries.
-        AZ_DEVOPS_PAT:    Azure DevOps PAT used to authenticate downloads.
-        TMP_DIR:          Local directory used to cache downloaded .nupkg files.
+        github_token:     GitHub PAT used to authenticate pushes and version queries.
+        az_devops_pat:    Azure DevOps PAT used to authenticate downloads.
+        tmp_dir:          Local directory used to cache downloaded .nupkg files.
         allowed_packages: List of package dicts (``{name, versions}``) to sync,
                           optionally filtered to a single package.
     """
 
-    def __init__(self, packages_file: str, package_filter: Optional[str] = None) -> None:
+    def __init__(self, packages_file: str, package_filter: str | None = None) -> None:
         """Initialise the syncer and load the package list.
 
         Args:
@@ -59,21 +56,19 @@ class NuGetSyncer:
                             (case-insensitive) will be synced.  Raises
                             :class:`click.BadParameter` if no match is found.
         """
-        self.NUGET_FEED_URL: str = _AZDO_FEED_INDEX
-        self.GITHUB_NUGET_URL: str = _GITHUB_NUGET_PUSH_URL
-        self.GITHUB_TOKEN: Optional[str] = os.getenv("GH_NUGET_TOKEN", os.getenv("GITHUB_TOKEN"))
-        self.AZ_DEVOPS_PAT: Optional[str] = os.getenv("AZ_DEVOPS_PAT")
-        self.TMP_DIR: str = _TMP_DIR
-        self.package_filter: Optional[str] = package_filter
-        self.allowed_packages: list[dict] = self.load_allowed_packages(packages_file)
+        self.github_token: str | None = os.getenv("GH_NUGET_TOKEN") or os.getenv("GITHUB_TOKEN")
+        self.az_devops_pat: str | None = os.getenv("AZ_DEVOPS_PAT")
+        self.tmp_dir: Path = Path(_TMP_DIR)
+        self.package_filter = package_filter
+        self.allowed_packages: list[dict] = self._load_packages(packages_file)
         self._github_versions_cache: dict[str, set[str]] = {}
-        os.makedirs(self.TMP_DIR, exist_ok=True)
+        self.tmp_dir.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
     # Package list loading
     # ------------------------------------------------------------------
 
-    def load_allowed_packages(self, packages_file: str) -> list[dict]:
+    def _load_packages(self, packages_file: str) -> list[dict]:
         """Load and optionally filter the package list from a YAML file.
 
         The YAML file is expected to have the structure::
@@ -96,13 +91,13 @@ class NuGetSyncer:
                 package is found in the file.
         """
         try:
-            with open(packages_file, 'r') as f:
-                packages: list[dict] = yaml.safe_load(f).get('packages', []) or []
+            with open(packages_file) as f:
+                packages: list[dict] = yaml.safe_load(f).get("packages", []) or []
         except Exception as e:
             click.echo(f"Error loading {packages_file}: {e}", err=True)
             return []
         if self.package_filter:
-            packages = [p for p in packages if p.get('name', '').lower() == self.package_filter.lower()]
+            packages = [p for p in packages if p.get("name", "").lower() == self.package_filter.lower()]
             if not packages:
                 raise click.BadParameter(f"Package '{self.package_filter}' not found in {packages_file}")
         return packages
@@ -130,10 +125,10 @@ class NuGetSyncer:
             return self._github_versions_cache[name]
         url = f"{_GITHUB_NUGET_BASE}/download/{name.lower()}/index.json"
         try:
-            resp = requests.get(url, auth=("token", self.GITHUB_TOKEN), timeout=15)
-            versions: set[str] = set(resp.json().get("versions", [])) if resp.status_code == 200 else set()
+            resp = requests.get(url, auth=("token", self.github_token), timeout=15)
+            versions = set(resp.json().get("versions", [])) if resp.ok else set()
         except Exception as e:
-            print(f"Warning: could not fetch published versions for {name}: {e}")
+            click.echo(f"Warning: could not fetch published versions for {name}: {e}", err=True)
             versions = set()
         self._github_versions_cache[name] = versions
         return versions
@@ -142,7 +137,7 @@ class NuGetSyncer:
     # Download
     # ------------------------------------------------------------------
 
-    def download_package(self, name: str, version: str) -> str:
+    def download_package(self, name: str, version: str) -> Path:
         """Download a single package version from the Azure DevOps NuGet feed.
 
         Uses the NuGet v3 flat container API
@@ -151,7 +146,7 @@ class NuGetSyncer:
         ``requests`` rather than the Mono nuget CLI, which has known issues
         resolving ``ClearTextPassword`` credentials on Linux.
 
-        The file is cached in :attr:`TMP_DIR`; if it already exists on disk the
+        The file is cached in :attr:`tmp_dir`; if it already exists on disk the
         download is skipped.
 
         Args:
@@ -159,93 +154,67 @@ class NuGetSyncer:
             version: The exact version string to download (e.g. ``8.2.2``).
 
         Returns:
-            The local file path of the downloaded ``.nupkg`` file.
+            The local :class:`~pathlib.Path` of the downloaded ``.nupkg`` file.
 
         Raises:
             requests.HTTPError: If the Azure DevOps feed returns a non-2xx
                 response (e.g. 401 Unauthorised or 404 Not Found).
         """
         filename = f"{name}.{version}.nupkg".replace("/", "_")
-        filepath = os.path.join(self.TMP_DIR, filename)
-        if os.path.exists(filepath):
-            print(f"Already downloaded: {filename}")
+        filepath = self.tmp_dir / filename
+        if filepath.exists():
+            click.echo(f"Already downloaded: {filename}")
             return filepath
-        print(f"Downloading {name} {version} from NuGet v3 feed...")
+        click.echo(f"Downloading {name} {version}...")
         url = f"{_AZDO_FEED_BASE}/{name.lower()}/{version}/{name.lower()}.{version}.nupkg"
-        resp = requests.get(url, auth=("any", self.AZ_DEVOPS_PAT), timeout=120, stream=True)
+        resp = requests.get(url, auth=("any", self.az_devops_pat), timeout=120, stream=True)
         resp.raise_for_status()
-        with open(filepath, "wb") as f:
+        with filepath.open("wb") as f:
             for chunk in resp.iter_content(chunk_size=8192):
                 f.write(chunk)
-        print(f"Downloaded: {filename}")
+        click.echo(f"Downloaded: {filename}")
         return filepath
 
     # ------------------------------------------------------------------
     # Upload
     # ------------------------------------------------------------------
 
-    def upload_to_github(self, package_file: str) -> bool:
+    def upload_to_github(self, package_file: Path | str) -> bool:
         """Push a ``.nupkg`` file to the GitHub Package Registry using ``dotnet nuget push``.
 
         Args:
-            package_file: Absolute or relative path to the ``.nupkg`` file.
+            package_file: Path to the ``.nupkg`` file.
 
         Returns:
             ``True`` if the push succeeded, ``False`` otherwise.
         """
-        if not self.GITHUB_TOKEN:
-            print("GITHUB_TOKEN environment variable not set. Skipping GitHub upload.")
+        if not self.github_token:
+            click.echo("GITHUB_TOKEN not set — skipping upload.", err=True)
             return False
 
-        print(f"Uploading {os.path.basename(package_file)} to GitHub Packages...")
+        name = Path(package_file).name
+        click.echo(f"Uploading {name} to GitHub Packages...")
         try:
-            cmd = [
-                "dotnet", "nuget", "push", package_file,
-                "--source", self.GITHUB_NUGET_URL,
-                "--api-key", self.GITHUB_TOKEN,
-                "--skip-duplicate",
-            ]
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-            print(f"Successfully uploaded {os.path.basename(package_file)} to GitHub Packages")
+            subprocess.run(
+                [
+                    "dotnet", "nuget", "push", str(package_file),
+                    "--source", _GITHUB_NUGET_PUSH_URL,
+                    "--api-key", self.github_token,
+                    "--skip-duplicate",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            click.echo(f"Uploaded: {name}")
             return True
         except subprocess.CalledProcessError as e:
-            print(f"Failed to upload {os.path.basename(package_file)} to GitHub Packages: {e}")
+            click.echo(f"Failed to upload {name}: {e}", err=True)
             if e.stdout:
-                print(f"stdout: {e.stdout}")
+                click.echo(e.stdout, err=True)
             if e.stderr:
-                print(f"stderr: {e.stderr}")
+                click.echo(e.stderr, err=True)
             return False
-
-    def upload_all_packages_to_github(self) -> None:
-        """Upload every ``.nupkg`` file found in :attr:`TMP_DIR` to GitHub Packages.
-
-        Iterates over all ``.nupkg`` files in the local cache directory and
-        calls :meth:`upload_to_github` for each one.  Prints a summary of
-        successes and failures on completion.
-        """
-        if not os.path.exists(self.TMP_DIR):
-            print("No packages directory found. Nothing to upload.")
-            return
-
-        package_files = [f for f in os.listdir(self.TMP_DIR) if f.endswith('.nupkg')]
-        if not package_files:
-            print("No .nupkg files found in packages directory.")
-            return
-
-        print(f"Found {len(package_files)} packages to upload to GitHub Packages...")
-        successful_uploads = 0
-        failed_uploads = 0
-
-        for package_file in package_files:
-            full_path = os.path.join(self.TMP_DIR, package_file)
-            if self.upload_to_github(full_path):
-                successful_uploads += 1
-            else:
-                failed_uploads += 1
-
-        print("\nUpload summary:")
-        print(f"  Successful: {successful_uploads}")
-        print(f"  Failed: {failed_uploads}")
 
     # ------------------------------------------------------------------
     # Sync
@@ -268,45 +237,34 @@ class NuGetSyncer:
         if not self.allowed_packages:
             click.echo("No packages specified. Nothing to sync.")
             return
-        click.echo(f"Will sync the following packages: {[p.get('name', p) for p in self.allowed_packages]}")
-        skipped = 0
-        successful = 0
-        failed = 0
+
+        click.echo(f"Syncing: {[p.get('name') for p in self.allowed_packages]}")
+        skipped = successful = failed = 0
+
         for pkg in self.allowed_packages:
-            pkg_name: str = pkg.get('name', pkg)
-            versions: list[str] = pkg.get('versions', [])
-            published = self.get_github_published_versions(pkg_name)
+            name: str = pkg.get("name", "")
+            versions: list[str] = pkg.get("versions") or []
+            published = self.get_github_published_versions(name)
             for version in versions:
                 if version in published:
-                    print(f"Already published: {pkg_name} {version} — skipping")
+                    click.echo(f"Already published: {name} {version} — skipping")
                     skipped += 1
                     continue
                 try:
-                    package_file = self.download_package(pkg_name, version)
-                    if package_file and os.path.exists(package_file):
-                        if self.upload_to_github(package_file):
-                            successful += 1
-                        else:
-                            failed += 1
-                except subprocess.CalledProcessError as e:
-                    print(f"Failed to sync {pkg_name} {version}: exit code {e.returncode}")
-                    if e.stdout:
-                        print(e.stdout)
-                    if e.stderr:
-                        print(e.stderr)
-                    failed += 1
+                    package_file = self.download_package(name, version)
+                    if self.upload_to_github(package_file):
+                        successful += 1
+                    else:
+                        failed += 1
                 except Exception as e:
-                    print(f"Failed to sync {pkg_name} {version}: {e}")
+                    click.echo(f"Failed to sync {name} {version}: {e}", err=True)
                     failed += 1
 
-        print("\nSync summary:")
-        print(f"  Uploaded:  {successful}")
-        print(f"  Skipped:   {skipped}")
-        print(f"  Failed:    {failed}")
+        click.echo(f"\nSync summary:\n  Uploaded: {successful}\n  Skipped:  {skipped}\n  Failed:   {failed}")
 
 
 # ---------------------------------------------------------------------------
-# Helpers used by the register command
+# Helpers
 # ---------------------------------------------------------------------------
 
 def _version_key(v: str) -> tuple[int, ...]:
@@ -321,84 +279,7 @@ def _version_key(v: str) -> tuple[int, ...]:
     Returns:
         A tuple of integers suitable for use as a sort key.
     """
-    parts: list[int] = []
-    for segment in v.split("."):
-        try:
-            parts.append(int(segment))
-        except ValueError:
-            parts.append(0)
-    return tuple(parts)
-
-
-def _sort_versions_in_file(packages_file: str) -> dict[str, int]:
-    """Sort the versions for every package in *packages_file* in ascending semver order.
-
-    Edits the file in-place using line-based manipulation so that comments and
-    overall formatting are preserved.  Inline comments on version lines (e.g.
-    ``- 1.0.0.1 # unusual release``) travel with their version entry.
-
-    Args:
-        packages_file: Path to the packages YAML file.
-
-    Returns:
-        A mapping of ``{package_name: version_count}`` for each package whose
-        versions were reordered.  Packages that were already sorted are omitted.
-    """
-    with open(packages_file, "r") as f:
-        lines = f.readlines()
-
-    changed: dict[str, int] = {}
-    current_pkg: Optional[str] = None
-    in_versions: bool = False
-    ver_indices: list[int] = []
-
-    def _flush() -> None:
-        nonlocal ver_indices, in_versions
-        if ver_indices and current_pkg is not None:
-            def _ver_str(idx: int) -> str:
-                raw = lines[idx].strip()
-                return raw[2:].split("#")[0].strip() if raw.startswith("- ") else raw
-
-            # Deduplicate (first occurrence wins) then sort
-            unique: dict[str, str] = {}  # version_str -> original line content
-            for idx in ver_indices:
-                v = _ver_str(idx)
-                if v not in unique:
-                    unique[v] = lines[idx]
-
-            sorted_lines = [unique[v] for v in sorted(unique, key=_version_key)]
-            original_lines = [lines[i] for i in ver_indices]
-
-            # Write sorted lines back; blank any slots freed by deduplication
-            for pos, idx in enumerate(ver_indices):
-                lines[idx] = sorted_lines[pos] if pos < len(sorted_lines) else ""
-
-            if [lines[i] for i in ver_indices] != original_lines:
-                changed[current_pkg] = len(sorted_lines)
-        ver_indices.clear()
-        in_versions = False
-
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("# "):
-            continue
-        if stripped.startswith("- name:") or (not stripped.startswith("-") and stripped.startswith("name:")):
-            _flush()
-            current_pkg = stripped.split("name:", 1)[1].strip()
-        elif stripped == "versions:" and current_pkg is not None:
-            in_versions = True
-        elif in_versions:
-            if stripped.startswith("- ") and not stripped.startswith("- name:"):
-                ver_indices.append(i)
-            elif stripped and not stripped.startswith("#"):
-                _flush()
-
-    _flush()
-
-    with open(packages_file, "w") as f:
-        f.writelines(lines)
-
-    return changed
+    return tuple(int(x) if x.isdigit() else 0 for x in v.split("."))
 
 
 def _get_azdo_versions(name: str, az_pat: str) -> set[str]:
@@ -417,9 +298,7 @@ def _get_azdo_versions(name: str, az_pat: str) -> set[str]:
         auth=("any", az_pat),
         timeout=15,
     )
-    if resp.status_code != 200:
-        return set()
-    return set(resp.json().get("versions", []))
+    return set(resp.json().get("versions", [])) if resp.ok else set()
 
 
 def _validate_versions(name: str, versions: tuple[str, ...], az_pat: str) -> None:
@@ -434,19 +313,13 @@ def _validate_versions(name: str, versions: tuple[str, ...], az_pat: str) -> Non
         click.ClickException: If the package is not found in the feed, or if
             any of the requested versions are not available.
     """
-    resp = requests.get(
-        f"{_AZDO_FEED_BASE}/{name.lower()}/index.json",
-        auth=("any", az_pat),
-        timeout=15,
-    )
-    if resp.status_code != 200:
+    available = _get_azdo_versions(name, az_pat)
+    if not available:
         raise click.ClickException(f"Package '{name}' not found in Azure DevOps feed.")
-    available: set[str] = set(resp.json().get("versions", []))
-    missing = [v for v in versions if v not in available]
-    if missing:
+    if missing := [v for v in versions if v not in available]:
         raise click.ClickException(
             f"Version(s) not found in Azure DevOps feed: {', '.join(missing)}\n"
-            f"Available: {', '.join(sorted(available))}"
+            f"Available: {', '.join(sorted(available, key=_version_key))}"
         )
 
 
@@ -478,15 +351,15 @@ def _write_versions_to_file(
         click.ClickException: If the package entry or its versions block cannot
             be located in the file (should not occur under normal circumstances).
     """
-    with open(packages_file, 'r') as f:
-        lines = f.readlines()
+    path = Path(packages_file)
+    content = path.read_text()
+    lines = content.splitlines(keepends=True)
+    data = yaml.safe_load(content)
 
-    with open(packages_file, 'r') as f:
-        data = yaml.safe_load(f)
-    packages: list[dict] = data.get('packages') or []
-    existing = next((p for p in packages if p.get('name', '').lower() == name.lower()), None)
+    packages: list[dict] = data.get("packages") or []
+    existing = next((p for p in packages if p.get("name", "").lower() == name.lower()), None)
 
-    already_present: set[str] = {str(v) for v in existing.get('versions', [])} if existing else set()
+    already_present: set[str] = {str(v) for v in existing.get("versions", [])} if existing else set()
     to_add = sorted([v for v in versions if v not in already_present], key=_version_key)
     skipped = [v for v in versions if v in already_present]
 
@@ -495,48 +368,113 @@ def _write_versions_to_file(
 
     if existing:
         pkg_line = next(
-            (i for i, l in enumerate(lines) if l.strip().lstrip('- ').startswith(f'name: {name}')),
+            (i for i, l in enumerate(lines) if l.strip().lstrip("- ").startswith(f"name: {name}")),
             None,
         )
         if pkg_line is None:
             raise click.ClickException(f"Could not locate '{name}' in {packages_file}.")
 
-        last_ver_line: Optional[int] = None
-        ver_indent: Optional[int] = None
+        last_ver_line: int | None = None
+        ver_indent: int | None = None
         in_versions = False
         for i in range(pkg_line + 1, len(lines)):
             stripped = lines[i].strip()
-            if not stripped or stripped.startswith('#'):
+            if not stripped or stripped.startswith("#"):
                 continue
-            if stripped == 'versions:':
+            if stripped == "versions:":
                 in_versions = True
                 continue
             if in_versions:
-                if stripped.startswith('- ') and not stripped.startswith('- name:'):
+                if stripped.startswith("- ") and not stripped.startswith("- name:"):
                     last_ver_line = i
                     ver_indent = len(lines[i]) - len(lines[i].lstrip())
                 else:
                     break
-            elif stripped.startswith('- name:'):
+            elif stripped.startswith("- name:"):
                 break
 
         if last_ver_line is None:
             raise click.ClickException(f"Could not find versions block for '{name}'.")
 
         for v in reversed(to_add):
-            lines.insert(last_ver_line + 1, ' ' * ver_indent + f'- {v}\n')
+            lines.insert(last_ver_line + 1, " " * ver_indent + f"- {v}\n")
     else:
-        if lines and not lines[-1].endswith('\n'):
-            lines.append('\n')
-        lines.append(f'  - name: {name}\n')
-        lines.append(f'    versions:\n')
+        if lines and not lines[-1].endswith("\n"):
+            lines.append("\n")
+        lines.append(f"  - name: {name}\n")
+        lines.append("    versions:\n")
         for v in to_add:
-            lines.append(f'      - {v}\n')
+            lines.append(f"      - {v}\n")
 
-    with open(packages_file, 'w') as f:
-        f.writelines(lines)
-
+    path.write_text("".join(lines))
     return to_add, skipped
+
+
+def _sort_versions_in_file(packages_file: str) -> dict[str, int]:
+    """Sort the versions for every package in *packages_file* in ascending semver order.
+
+    Edits the file in-place using line-based manipulation so that comments and
+    overall formatting are preserved.  Inline comments on version lines (e.g.
+    ``- 1.0.0.1 # unusual release``) travel with their version entry.
+
+    Args:
+        packages_file: Path to the packages YAML file.
+
+    Returns:
+        A mapping of ``{package_name: version_count}`` for each package whose
+        versions were reordered.  Packages that were already sorted are omitted.
+    """
+    path = Path(packages_file)
+    lines = path.read_text().splitlines(keepends=True)
+
+    changed: dict[str, int] = {}
+    current_pkg: str | None = None
+    in_versions: bool = False
+    ver_indices: list[int] = []
+
+    def _ver_str(idx: int) -> str:
+        raw = lines[idx].strip()
+        return raw[2:].split("#")[0].strip() if raw.startswith("- ") else raw
+
+    def _flush() -> None:
+        nonlocal ver_indices, in_versions
+        if ver_indices and current_pkg is not None:
+            unique: dict[str, str] = {}
+            for idx in ver_indices:
+                v = _ver_str(idx)
+                if v not in unique:
+                    unique[v] = lines[idx]
+
+            sorted_lines = [unique[v] for v in sorted(unique, key=_version_key)]
+            original_lines = [lines[i] for i in ver_indices]
+
+            for pos, idx in enumerate(ver_indices):
+                lines[idx] = sorted_lines[pos] if pos < len(sorted_lines) else ""
+
+            if [lines[i] for i in ver_indices] != original_lines:
+                changed[current_pkg] = len(sorted_lines)
+        ver_indices.clear()
+        in_versions = False
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            continue
+        if stripped.startswith("- name:") or (not stripped.startswith("-") and stripped.startswith("name:")):
+            _flush()
+            current_pkg = stripped.split("name:", 1)[1].strip()
+        elif stripped == "versions:" and current_pkg is not None:
+            in_versions = True
+        elif in_versions:
+            if stripped.startswith("- ") and not stripped.startswith("- name:"):
+                ver_indices.append(i)
+            elif stripped and not stripped.startswith("#"):
+                _flush()
+
+    _flush()
+
+    path.write_text("".join(lines))
+    return changed
 
 
 # ---------------------------------------------------------------------------
@@ -546,20 +484,18 @@ def _write_versions_to_file(
 @click.group()
 def cli() -> None:
     """Manage NuGet package sync between Azure DevOps and GitHub Packages."""
-    pass
 
 
 @cli.command()
 @click.argument("packages_file", type=click.Path(exists=True, dir_okay=False))
 @click.option("--package", default=None, help="Sync only this package name (must exist in the packages file).")
-def sync(packages_file: str, package: Optional[str]) -> None:
+def sync(packages_file: str, package: str | None) -> None:
     """Sync packages from Azure DevOps to GitHub Packages.
 
     Reads PACKAGES_FILE, queries GitHub Packages to skip already-published
     versions, then downloads and pushes any missing versions.
     """
-    syncer = NuGetSyncer(packages_file, package_filter=package)
-    syncer.sync_packages()
+    NuGetSyncer(packages_file, package_filter=package).sync_packages()
 
 
 @cli.command()
@@ -606,7 +542,7 @@ def register(
               help="Print new versions that would be registered without writing to the file.")
 @click.option("--include-prerelease", is_flag=True, default=False,
               help="Include prerelease versions (excluded by default).")
-def upgrade(packages_file: str, package: Optional[str], dry_run: bool, include_prerelease: bool) -> None:
+def upgrade(packages_file: str, package: str | None, dry_run: bool, include_prerelease: bool) -> None:
     """Check Azure DevOps for new versions of packages listed in PACKAGES_FILE and register them.
 
     Stable versions only by default; use --include-prerelease to also pick up
@@ -619,7 +555,7 @@ def upgrade(packages_file: str, package: Optional[str], dry_run: bool, include_p
     if not az_pat:
         raise click.ClickException("AZ_DEVOPS_PAT env var is required.")
 
-    with open(packages_file, "r") as f:
+    with open(packages_file) as f:
         data = yaml.safe_load(f)
     packages: list[dict] = data.get("packages") or []
 
@@ -628,7 +564,7 @@ def upgrade(packages_file: str, package: Optional[str], dry_run: bool, include_p
         if not packages:
             raise click.BadParameter(f"Package '{package}' not found in {packages_file}.")
 
-    total_added: list[tuple[str, str]] = []
+    total_added = 0
 
     for pkg in packages:
         name: str = pkg.get("name", "")
@@ -647,19 +583,18 @@ def upgrade(packages_file: str, package: Optional[str], dry_run: bool, include_p
             key=_version_key,
         )
         if not new_versions:
-            click.echo(f"  Up to date.")
+            click.echo("  Up to date.")
             continue
 
         click.echo(f"  New versions: {', '.join(new_versions)}")
         if not dry_run:
             _write_versions_to_file(packages_file, name, tuple(new_versions))
-            for v in new_versions:
-                total_added.append((name, v))
+            total_added += len(new_versions)
 
     if dry_run:
         click.echo("\n(Dry run — no changes written.)")
     else:
-        click.echo(f"\nUpgrade complete. {len(total_added)} new version(s) registered.")
+        click.echo(f"\nUpgrade complete. {total_added} new version(s) registered.")
         if total_added:
             click.echo("Run 'sync' to push them to the GitHub Package Registry.")
 
@@ -691,9 +626,9 @@ def download(name: str, version: str, output_dir: str) -> None:
     if not az_pat:
         raise click.ClickException("AZ_DEVOPS_PAT env var is required.")
 
-    os.makedirs(output_dir, exist_ok=True)
-    filename = f"{name}.{version}.nupkg"
-    filepath = os.path.join(output_dir, filename)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    filepath = out / f"{name}.{version}.nupkg"
     url = f"{_AZDO_FEED_BASE}/{name.lower()}/{version}/{name.lower()}.{version}.nupkg"
 
     click.echo(f"Downloading {name} {version}...")
@@ -702,7 +637,7 @@ def download(name: str, version: str, output_dir: str) -> None:
         raise click.ClickException(f"{name} {version} not found in Azure DevOps feed.")
     resp.raise_for_status()
 
-    with open(filepath, "wb") as f:
+    with filepath.open("wb") as f:
         for chunk in resp.iter_content(chunk_size=8192):
             f.write(chunk)
 
