@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.2.0...v1.3.0) (2026-03-09)
+
+
+### Features
+
+* **script:** Add logic to generate a Nuget.config and skip already uploaded packages. ([9aed007](https://github.com/Keyfactor/public-nuget-packages/commit/9aed0074df9430ddcd9de1d78137f1dce580bdb6))
+
 # [1.2.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.1.3...v1.2.0) (2026-03-09)
 
 
