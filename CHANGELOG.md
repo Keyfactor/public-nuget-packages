@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/Keyfactor/public-nuget-packages/compare/v1.6.0...v1.6.1) (2026-03-09)
+
+
+### Bug Fixes
+
+* **cli:** If failures exit code non-zero ([a4bc399](https://github.com/Keyfactor/public-nuget-packages/commit/a4bc399d362812d254e10f2ed6a802cbdc2d38f3))
+
 # [1.6.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.5.0...v1.6.0) (2026-03-09)
 
 
