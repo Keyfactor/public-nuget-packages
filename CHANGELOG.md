@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.4.0...v1.5.0) (2026-03-09)
+
+
+### Features
+
+* **cli:** Add `download` CLI function ([64c956a](https://github.com/Keyfactor/public-nuget-packages/commit/64c956ad68abe627f30d927dc84758f58d2267be))
+
 # [1.4.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.3.1...v1.4.0) (2026-03-09)
 
 
