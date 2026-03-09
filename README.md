@@ -39,7 +39,7 @@ pip install -e .
 
 #### CLI Reference
 
-`scripts/sync_nuget.py` is a CLI with three commands:
+`scripts/sync_nuget.py` is a CLI with five commands:
 
 **`sync`** — Download and upload packages defined in a packages file. Skips versions already published to the GitHub Package Registry.
 
@@ -68,6 +68,30 @@ python scripts/sync_nuget.py register packages.yml Keyfactor.PKI 8.4.0 --skip-va
 ```
 
 After registering, run `sync` to push the new version(s) to the GitHub Package Registry.
+
+**`upgrade`** — Query Azure DevOps for new versions of all packages already listed in a packages file and register them automatically.
+
+```bash
+# Check all packages for new stable versions and register them
+source .env && python scripts/sync_nuget.py upgrade packages.yml
+
+# Preview what would be registered without writing
+source .env && python scripts/sync_nuget.py upgrade packages.yml --dry-run
+
+# Upgrade a single package
+source .env && python scripts/sync_nuget.py upgrade packages.yml --package Keyfactor.PKI
+
+# Include prerelease versions
+source .env && python scripts/sync_nuget.py upgrade packages.yml --include-prerelease
+```
+
+After upgrading, run `sync` to push the new versions to the GitHub Package Registry.
+
+**`sort`** — Sort versions for all packages in a packages file into ascending semver order and remove any duplicates.
+
+```bash
+python scripts/sync_nuget.py sort packages.yml
+```
 
 **`download`** — Download a single package version from Azure DevOps without uploading it.
 

@@ -3,6 +3,8 @@
 Commands:
     sync      Download and upload all (or one) package(s) defined in a packages YAML file.
     register  Add a new package or version(s) to a packages YAML file.
+    upgrade   Query Azure DevOps for new versions of all listed packages and register them.
+    sort      Sort and deduplicate versions in a packages YAML file.
     download  Download a single package version directly from Azure DevOps.
 
 Environment variables:
@@ -307,6 +309,119 @@ class NuGetSyncer:
 # Helpers used by the register command
 # ---------------------------------------------------------------------------
 
+def _version_key(v: str) -> tuple[int, ...]:
+    """Return a tuple of ints for semver-aware sorting.
+
+    Non-numeric segments (e.g. prerelease labels) fall back to zero so they
+    sort below their numeric counterparts.
+
+    Args:
+        v: A version string such as ``8.2.3`` or ``1.0.0``.
+
+    Returns:
+        A tuple of integers suitable for use as a sort key.
+    """
+    parts: list[int] = []
+    for segment in v.split("."):
+        try:
+            parts.append(int(segment))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
+
+def _sort_versions_in_file(packages_file: str) -> dict[str, int]:
+    """Sort the versions for every package in *packages_file* in ascending semver order.
+
+    Edits the file in-place using line-based manipulation so that comments and
+    overall formatting are preserved.  Inline comments on version lines (e.g.
+    ``- 1.0.0.1 # unusual release``) travel with their version entry.
+
+    Args:
+        packages_file: Path to the packages YAML file.
+
+    Returns:
+        A mapping of ``{package_name: version_count}`` for each package whose
+        versions were reordered.  Packages that were already sorted are omitted.
+    """
+    with open(packages_file, "r") as f:
+        lines = f.readlines()
+
+    changed: dict[str, int] = {}
+    current_pkg: Optional[str] = None
+    in_versions: bool = False
+    ver_indices: list[int] = []
+
+    def _flush() -> None:
+        nonlocal ver_indices, in_versions
+        if ver_indices and current_pkg is not None:
+            def _ver_str(idx: int) -> str:
+                raw = lines[idx].strip()
+                return raw[2:].split("#")[0].strip() if raw.startswith("- ") else raw
+
+            # Deduplicate (first occurrence wins) then sort
+            unique: dict[str, str] = {}  # version_str -> original line content
+            for idx in ver_indices:
+                v = _ver_str(idx)
+                if v not in unique:
+                    unique[v] = lines[idx]
+
+            sorted_lines = [unique[v] for v in sorted(unique, key=_version_key)]
+            original_lines = [lines[i] for i in ver_indices]
+
+            # Write sorted lines back; blank any slots freed by deduplication
+            for pos, idx in enumerate(ver_indices):
+                lines[idx] = sorted_lines[pos] if pos < len(sorted_lines) else ""
+
+            if [lines[i] for i in ver_indices] != original_lines:
+                changed[current_pkg] = len(sorted_lines)
+        ver_indices.clear()
+        in_versions = False
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            continue
+        if stripped.startswith("- name:") or (not stripped.startswith("-") and stripped.startswith("name:")):
+            _flush()
+            current_pkg = stripped.split("name:", 1)[1].strip()
+        elif stripped == "versions:" and current_pkg is not None:
+            in_versions = True
+        elif in_versions:
+            if stripped.startswith("- ") and not stripped.startswith("- name:"):
+                ver_indices.append(i)
+            elif stripped and not stripped.startswith("#"):
+                _flush()
+
+    _flush()
+
+    with open(packages_file, "w") as f:
+        f.writelines(lines)
+
+    return changed
+
+
+def _get_azdo_versions(name: str, az_pat: str) -> set[str]:
+    """Return all versions available for *name* in the Azure DevOps feed.
+
+    Args:
+        name:   The NuGet package ID.
+        az_pat: Azure DevOps PAT used for authentication.
+
+    Returns:
+        A set of version strings available in the feed, or an empty set if the
+        package is not found or the request fails.
+    """
+    resp = requests.get(
+        f"{_AZDO_FEED_BASE}/{name.lower()}/index.json",
+        auth=("any", az_pat),
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        return set()
+    return set(resp.json().get("versions", []))
+
+
 def _validate_versions(name: str, versions: tuple[str, ...], az_pat: str) -> None:
     """Verify that each requested version exists in the Azure DevOps feed.
 
@@ -372,7 +487,7 @@ def _write_versions_to_file(
     existing = next((p for p in packages if p.get('name', '').lower() == name.lower()), None)
 
     already_present: set[str] = {str(v) for v in existing.get('versions', [])} if existing else set()
-    to_add = [v for v in versions if v not in already_present]
+    to_add = sorted([v for v in versions if v not in already_present], key=_version_key)
     skipped = [v for v in versions if v in already_present]
 
     if not to_add:
@@ -481,6 +596,84 @@ def register(
         click.echo(f"Already in {packages_file}, skipped: {', '.join(skipped)}")
     if not added and not skipped:
         click.echo("Nothing to register.")
+
+
+@cli.command()
+@click.argument("packages_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--package", default=None,
+              help="Check only this package name (must exist in the packages file).")
+@click.option("--dry-run", is_flag=True, default=False,
+              help="Print new versions that would be registered without writing to the file.")
+@click.option("--include-prerelease", is_flag=True, default=False,
+              help="Include prerelease versions (excluded by default).")
+def upgrade(packages_file: str, package: Optional[str], dry_run: bool, include_prerelease: bool) -> None:
+    """Check Azure DevOps for new versions of packages listed in PACKAGES_FILE and register them.
+
+    Stable versions only by default; use --include-prerelease to also pick up
+    prerelease versions.  Requires AZ_DEVOPS_PAT env var.
+
+    After running upgrade, use the sync command to push the new versions to the
+    GitHub Package Registry.
+    """
+    az_pat = os.getenv("AZ_DEVOPS_PAT")
+    if not az_pat:
+        raise click.ClickException("AZ_DEVOPS_PAT env var is required.")
+
+    with open(packages_file, "r") as f:
+        data = yaml.safe_load(f)
+    packages: list[dict] = data.get("packages") or []
+
+    if package:
+        packages = [p for p in packages if p.get("name", "").lower() == package.lower()]
+        if not packages:
+            raise click.BadParameter(f"Package '{package}' not found in {packages_file}.")
+
+    total_added: list[tuple[str, str]] = []
+
+    for pkg in packages:
+        name: str = pkg.get("name", "")
+        current: set[str] = {str(v) for v in pkg.get("versions") or []}
+
+        click.echo(f"Checking {name}...")
+        available = _get_azdo_versions(name, az_pat)
+        if not available:
+            click.echo("  Not found in Azure DevOps feed — skipping.")
+            continue
+
+        candidates = available if include_prerelease else {v for v in available if "PRERELEASE" not in v.upper()}
+        max_current = max(current, key=_version_key) if current else None
+        new_versions = sorted(
+            (v for v in candidates - current if max_current is None or _version_key(v) > _version_key(max_current)),
+            key=_version_key,
+        )
+        if not new_versions:
+            click.echo(f"  Up to date.")
+            continue
+
+        click.echo(f"  New versions: {', '.join(new_versions)}")
+        if not dry_run:
+            _write_versions_to_file(packages_file, name, tuple(new_versions))
+            for v in new_versions:
+                total_added.append((name, v))
+
+    if dry_run:
+        click.echo("\n(Dry run — no changes written.)")
+    else:
+        click.echo(f"\nUpgrade complete. {len(total_added)} new version(s) registered.")
+        if total_added:
+            click.echo("Run 'sync' to push them to the GitHub Package Registry.")
+
+
+@cli.command(name="sort")
+@click.argument("packages_file", type=click.Path(exists=True, dir_okay=False))
+def sort_cmd(packages_file: str) -> None:
+    """Sort versions for all packages in PACKAGES_FILE in ascending semver order."""
+    changed = _sort_versions_in_file(packages_file)
+    if changed:
+        for name, count in changed.items():
+            click.echo(f"Sorted {count} version(s) for {name}")
+    else:
+        click.echo("All versions already in order.")
 
 
 @cli.command()

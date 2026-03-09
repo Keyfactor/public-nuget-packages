@@ -27,10 +27,10 @@ packages:
       - 1.0.0
   - name: Keyfactor.PKI
     versions:
-      - 4.0.1
       - 3.2.0
       - 3.4.7
       - 3.4.8
+      - 4.0.1
       - 5.0.0
       - 5.5.0
       - 5.7.0
@@ -54,6 +54,8 @@ packages:
       - 2.8.1
       - 2.8.2
       - 2.9.0
+      - 2.10.0
+      - 2.11.0
   - name: Keyfactor.AnyGateway.IAnyCAPlugin
     versions:
       - 2.0.0
