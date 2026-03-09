@@ -21,7 +21,7 @@ Once complete, the package will be available in the Keyfactor Public GitHub Pack
 
 ### Running Locally
 
-**Prerequisites:** Python 3.8+, `dotnet` CLI
+**Prerequisites:** Python 3.12+, `dotnet` CLI
 
 1. Create a `.env` file in the repo root:
 

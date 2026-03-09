@@ -12,8 +12,6 @@ Environment variables:
     GITHUB_TOKEN    GitHub token (used as fallback for GH_NUGET_TOKEN).
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 from typing import Optional
