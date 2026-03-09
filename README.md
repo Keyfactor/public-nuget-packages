@@ -2,36 +2,49 @@
 
 Publicly available NuGet packages useful for building Keyfactor integrations
 
-To access these packages add https://nuget.pkg.github.com/Keyfactor/index.json as a NuGet package source to Visual
-Studio or other development tools.
+To access these packages add `https://nuget.pkg.github.com/Keyfactor/index.json` as a NuGet package source in Visual Studio or other development tools.
 
-Some package availability changes from time to time. Please view the `CHANGELOG.md` for further details on changes to
-available libraries.
+Some package availability changes from time to time. Please view the `CHANGELOG.md` for further details on changes to available libraries.
 
-## Adding a Nuget Package and/or Version
+## Adding a NuGet Package and/or Version
 
 ### Via GitHub Actions
 
-To add a Nuget package modify the [packages.yml](./packages.yml) file in the root of this repository.
+1. Add the package and version(s) to [`packages.yml`](./packages.yml).
+2. Trigger the [Sync NuGet Packages](https://github.com/Keyfactor/public-nuget-packages/actions/workflows/sync-nuget.yml) workflow.
+
+Once complete, the package will be available in the Keyfactor Public GitHub Package Registry (GPR). The workflow runs automatically on a weekly schedule and skips any versions already published.
 
 > [!IMPORTANT]
-> The package and version must exist in this Nuget repository before it can be added to the `packages.yml` file.
+> The package and version must already exist in the Azure DevOps feed before adding it to `packages.yml`:
 > https://dev.azure.com/Keyfactor/Engineering/_artifacts/feed/KeyfactorPackages@Local
 
-The to trigger the sync run the
-workflow [Sync NuGet Packages](https://github.com/Keyfactor/public-nuget-packages/actions/workflows/sync-nuget.yml). Once
-it's complete, the package will be available in the Keyfactor Public GitHub Package Registry (GPR).
+### Running Locally
+
+**Prerequisites:** Python 3.8+, `nuget` CLI (with Mono on Linux), `dotnet` CLI
+
+1. Create a `.env` file in the repo root:
+
+```bash
+export AZ_DEVOPS_PAT=<Azure DevOps PAT with package read permissions>
+export GITHUB_TOKEN=<GitHub PAT with write:packages permission>
+export GITHUB_ORG=keyfactor
+```
+
+2. Install dependencies and run:
+
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -e .
+source .env && python scripts/sync_nuget.py
+```
+
+The script queries the GitHub Package Registry first and skips any versions already published.
 
 ### Manually using dotnet CLI
 
-In order to add a nuget package to the Keyfactor Public GitHub Package Registry (GPR), you must download from the 
-[DevOps Artifacts site](https://dev.azure.com/Keyfactor/Engineering/_artifacts/feed/KeyfactorPackages@Local) 
-and then push it to the GPR using a Personal Access Token (PAT).
-
-Steps:
-1. Create a new PAT with access with `write:packages` access
-2. Grant SSO to the PAT
-3. Run the following command to push the package to the GitHub Package Registry (GPR):
+1. Create a GitHub PAT with `write:packages` access and grant it SSO.
+2. Push the package:
 
 ```bash
 dotnet nuget push ./Your.Package.1.0.0.nupkg \

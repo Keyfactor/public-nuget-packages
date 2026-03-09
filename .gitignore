@@ -5,3 +5,7 @@ _site
 vendor
 
 .vs
+*.env
+.claude
+CLAUDE.md
+nupkgs/*
