@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.6.1...v1.7.0) (2026-03-09)
+
+
+### Features
+
+* **ci:** Add workflow to create PRs automatically if new packages are released. ([fd7d73e](https://github.com/Keyfactor/public-nuget-packages/commit/fd7d73eee3bbe8c69bbb420538bc7b4ace955ce9))
+
 ## [1.6.1](https://github.com/Keyfactor/public-nuget-packages/compare/v1.6.0...v1.6.1) (2026-03-09)
 
 
