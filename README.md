@@ -10,10 +10,14 @@ Some package availability changes from time to time. Please view the `CHANGELOG.
 
 ### Via GitHub Actions
 
+New versions of existing packages are registered automatically every Monday by the [Upgrade NuGet Packages](https://github.com/Keyfactor/public-nuget-packages/actions/workflows/upgrade-packages.yml) workflow, which opens a PR with any changes. Once merged, the daily [Sync NuGet Packages](https://github.com/Keyfactor/public-nuget-packages/actions/workflows/sync-nuget.yml) workflow pushes the new versions to the GitHub Package Registry.
+
+To add a brand new package or manually trigger a sync:
+
 1. Add the package and version(s) to [`packages.yml`](./packages.yml).
 2. Trigger the [Sync NuGet Packages](https://github.com/Keyfactor/public-nuget-packages/actions/workflows/sync-nuget.yml) workflow.
 
-Once complete, the package will be available in the Keyfactor Public GitHub Package Registry (GPR). The workflow runs automatically on a daily schedule and skips any versions already published.
+Once complete, the package will be available in the Keyfactor Public GitHub Package Registry (GPR). The sync workflow runs automatically on a daily schedule and skips any versions already published.
 
 > [!IMPORTANT]
 > The package and version must already exist in the Azure DevOps feed before adding it to `packages.yml`:

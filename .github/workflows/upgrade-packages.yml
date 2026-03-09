@@ -1,0 +1,84 @@
+name: Upgrade NuGet Packages
+
+on:
+  schedule:
+    # Run every Monday at 3:00 AM UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    # Allow manual triggering
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run upgrade
+        run: python scripts/sync_nuget.py upgrade packages.yml | tee /tmp/upgrade-output.txt
+        env:
+          AZ_DEVOPS_PAT: ${{ secrets.AZ_DEVOPS_PAT }}
+
+      - name: Build PR body
+        id: pr-body
+        run: |
+          python - <<'EOF'
+          import os
+
+          with open("/tmp/upgrade-output.txt") as f:
+              lines = f.readlines()
+
+          # Collect only packages that gained new versions
+          entries = []
+          current_pkg = None
+          for line in lines:
+              line = line.rstrip()
+              if line.startswith("Checking "):
+                  current_pkg = line.removeprefix("Checking ").rstrip(".")
+              elif "New versions:" in line and current_pkg:
+                  versions = line.split("New versions:", 1)[1].strip()
+                  entries.append(f"| {current_pkg} | {versions} |")
+
+          body = "This PR was automatically created by the weekly upgrade workflow.\n\n"
+          if entries:
+              body += "## New versions registered\n\n"
+              body += "| Package | Versions |\n"
+              body += "| --- | --- |\n"
+              body += "\n".join(entries)
+              body += "\n\n"
+          body += (
+              "After merging, the daily "
+              "[Sync NuGet Packages](../actions/workflows/sync-nuget.yml) "
+              "workflow will push the new versions to the GitHub Package Registry, "
+              "or you can trigger it manually."
+          )
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"body<<EOF\n{body}\nEOF\n")
+          EOF
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GH_NUGET_TOKEN }}
+          branch: chore/upgrade-nuget-packages
+          commit-message: "chore: register new NuGet package versions"
+          title: "chore: register new NuGet package versions"
+          body: ${{ steps.pr-body.outputs.body }}
+          labels: automated
+          delete-branch: true
