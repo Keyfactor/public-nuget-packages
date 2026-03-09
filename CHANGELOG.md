@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.5.0...v1.6.0) (2026-03-09)
+
+
+### Features
+
+* **cli:** Add `upgrade` to fetch new releases of existing packages, and `sort` to sort versions oldest to latest. ([f62a9b4](https://github.com/Keyfactor/public-nuget-packages/commit/f62a9b4db4c6cf48e1453c8d1c68319c11b2a8f2))
+
 # [1.5.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.4.0...v1.5.0) (2026-03-09)
 
 
