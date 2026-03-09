@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/Keyfactor/public-nuget-packages/compare/v1.3.0...v1.3.1) (2026-03-09)
+
+
+### Bug Fixes
+
+* **script:** Capture stderr and stdout ([0f4a172](https://github.com/Keyfactor/public-nuget-packages/commit/0f4a1721fabcb9bc37d4d72a747f420125a6188b))
+
 # [1.3.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.2.0...v1.3.0) (2026-03-09)
 
 
