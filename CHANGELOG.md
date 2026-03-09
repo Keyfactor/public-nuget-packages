@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.3.1...v1.4.0) (2026-03-09)
+
+
+### Features
+
+* **cli:** Convert sync script to lightweight CLI. ([c106bcc](https://github.com/Keyfactor/public-nuget-packages/commit/c106bccccf82d515ea59b355df57b2a8396c4095))
+
 ## [1.3.1](https://github.com/Keyfactor/public-nuget-packages/compare/v1.3.0...v1.3.1) (2026-03-09)
 
 
