@@ -1,0 +1,9 @@
+LICENSE
+README.md
+pyproject.toml
+nuget_syncer.egg-info/PKG-INFO
+nuget_syncer.egg-info/SOURCES.txt
+nuget_syncer.egg-info/dependency_links.txt
+nuget_syncer.egg-info/requires.txt
+nuget_syncer.egg-info/top_level.txt
+scripts/sync_nuget.py

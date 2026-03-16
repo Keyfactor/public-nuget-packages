@@ -89,6 +89,7 @@ packages:
       - 2.4.0
       - 2.5.0
       - 2.6.0
+      - 2.6.0
   - name: Keyfactor.Workflows
     versions:
       - 1.0.0
