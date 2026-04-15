@@ -7,6 +7,13 @@ Commands:
     sort      Sort and deduplicate versions in a packages YAML file.
     download  Download a single package version directly from Azure DevOps.
 
+Package sources:
+    Most packages are sourced from the Azure DevOps feed (the default).  Packages that are
+    published directly to GitHub Packages by another repository should set ``source: github``
+    in packages.yml — they are downloaded from the Keyfactor GitHub Packages registry
+    (using GH_NUGET_TOKEN) rather than from Azure DevOps.  The ``upgrade`` command skips
+    packages with a non-azdo source since it queries the Azure DevOps feed.
+
 Environment variables:
     AZ_DEVOPS_PAT   Azure DevOps Personal Access Token with package read permissions.
     GH_NUGET_TOKEN  GitHub Personal Access Token with write:packages permission.
@@ -31,6 +38,10 @@ _AZDO_FEED_BASE = "https://pkgs.dev.azure.com/Keyfactor/_packaging/KeyfactorPack
 _GITHUB_NUGET_BASE = "https://nuget.pkg.github.com/keyfactor"
 _GITHUB_NUGET_PUSH_URL = "https://nuget.pkg.github.com/keyfactor/index.json"
 _TMP_DIR = "nupkgs"
+
+# Package source identifiers used in packages.yml
+_SOURCE_AZDO = "azdo"     # default: download from Azure DevOps feed
+_SOURCE_GITHUB = "github"  # download from GitHub Packages (keyfactor org)
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +187,41 @@ class NuGetSyncer:
         click.echo(f"Downloaded: {filename}")
         return filepath
 
+    def download_package_from_github(self, name: str, version: str) -> Path:
+        """Download a single package version from the Keyfactor GitHub Packages registry.
+
+        Used for packages whose canonical source is a GitHub repository rather than
+        the Azure DevOps feed (i.e. entries with ``source: github`` in packages.yml).
+        Authenticates with :attr:`github_token`.
+
+        The file is cached in :attr:`tmp_dir`; if it already exists on disk the
+        download is skipped.
+
+        Args:
+            name:    The NuGet package ID (e.g. ``Keyfactor.Extensions.Pam.Utilities``).
+            version: The exact version string to download.
+
+        Returns:
+            The local :class:`~pathlib.Path` of the downloaded ``.nupkg`` file.
+
+        Raises:
+            requests.HTTPError: If the GitHub Packages registry returns a non-2xx response.
+        """
+        filename = f"{name}.{version}.nupkg".replace("/", "_")
+        filepath = self.tmp_dir / filename
+        if filepath.exists():
+            click.echo(f"Already downloaded: {filename}")
+            return filepath
+        click.echo(f"Downloading {name} {version} from GitHub Packages...")
+        url = f"{_GITHUB_NUGET_BASE}/download/{name.lower()}/{version}/{name.lower()}.{version}.nupkg"
+        resp = requests.get(url, auth=("token", self.github_token), timeout=120, stream=True)
+        resp.raise_for_status()
+        with filepath.open("wb") as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+        click.echo(f"Downloaded: {filename}")
+        return filepath
+
     # ------------------------------------------------------------------
     # Upload
     # ------------------------------------------------------------------
@@ -246,6 +292,7 @@ class NuGetSyncer:
         for pkg in self.allowed_packages:
             name: str = pkg.get("name", "")
             versions: list[str] = pkg.get("versions") or []
+            source: str = pkg.get("source", _SOURCE_AZDO)
             published = self.get_github_published_versions(name)
             for version in versions:
                 if version in published:
@@ -253,7 +300,10 @@ class NuGetSyncer:
                     skipped += 1
                     continue
                 try:
-                    package_file = self.download_package(name, version)
+                    if source == _SOURCE_GITHUB:
+                        package_file = self.download_package_from_github(name, version)
+                    else:
+                        package_file = self.download_package(name, version)
                     if self.upload_to_github(package_file):
                         successful += 1
                     else:
@@ -575,7 +625,12 @@ def upgrade(packages_file: str, package: str | None, dry_run: bool, include_prer
 
     for pkg in packages:
         name: str = pkg.get("name", "")
+        source: str = pkg.get("source", _SOURCE_AZDO)
         current: set[str] = {str(v) for v in pkg.get("versions") or []}
+
+        if source != _SOURCE_AZDO:
+            click.echo(f"Skipping {name} (source: {source}, not Azure DevOps).")
+            continue
 
         click.echo(f"Checking {name}...")
         available = _get_azdo_versions(name, az_pat)

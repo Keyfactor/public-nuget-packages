@@ -1,4 +1,11 @@
 ---
+# Each entry requires `name` and `versions`.
+#
+# Optional: `source` — where the package is downloaded from during sync.
+#   source: azdo    (default) — Azure DevOps feed (KeyfactorPackages@Local)
+#   source: github  — GitHub Packages (keyfactor org); use this for packages whose
+#                     canonical source is a GitHub repository, not Azure DevOps.
+#                     The `upgrade` command skips packages with source: github.
 packages:
   - name: Keyfactor.Logging 
     versions:
@@ -61,6 +68,7 @@ packages:
     versions:
       - 1.0.0
   - name: Keyfactor.Extensions.Pam.Utilities
+    source: github  # published from github.com/Keyfactor/keyfactor-utilities-pam, not Azure DevOps
     versions:
       - 1.0.0
       - 1.0.1
