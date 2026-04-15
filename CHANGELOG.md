@@ -1,3 +1,10 @@
+## [1.7.3](https://github.com/Keyfactor/public-nuget-packages/compare/v1.7.2...v1.7.3) (2026-04-15)
+
+
+### Bug Fixes
+
+* **register:** Exact name match when locating package line in YAML file ([bdec440](https://github.com/Keyfactor/public-nuget-packages/commit/bdec44011711fba12340d66754a9fd7665dca59e))
+
 ## [1.7.2](https://github.com/Keyfactor/public-nuget-packages/compare/v1.7.1...v1.7.2) (2026-04-15)
 
 
