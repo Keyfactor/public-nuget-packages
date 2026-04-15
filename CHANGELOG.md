@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/Keyfactor/public-nuget-packages/compare/v1.7.0...v1.7.1) (2026-04-15)
+
+
+### Bug Fixes
+
+* **sync:** Support packages sourced from GitHub Packages instead of Azure DevOps ([ad1a879](https://github.com/Keyfactor/public-nuget-packages/commit/ad1a879b0405caa42a699f0887a48420a7000cf6))
+
 # [1.7.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.6.1...v1.7.0) (2026-03-09)
 
 
