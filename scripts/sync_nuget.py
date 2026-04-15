@@ -26,6 +26,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import re
+
 import click
 import requests
 import yaml
@@ -425,7 +427,8 @@ def _write_versions_to_file(
 
     if existing:
         pkg_line = next(
-            (i for i, l in enumerate(lines) if l.strip().lstrip("- ").startswith(f"name: {name}")),
+            (i for i, l in enumerate(lines)
+             if re.match(rf'^\s*-\s+name:\s+{re.escape(name)}\s*(?:#.*)?$', l)),
             None,
         )
         if pkg_line is None:
