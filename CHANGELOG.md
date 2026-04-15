@@ -1,3 +1,10 @@
+## [1.7.2](https://github.com/Keyfactor/public-nuget-packages/compare/v1.7.1...v1.7.2) (2026-04-15)
+
+
+### Bug Fixes
+
+* **packages:** Remove Keyfactor.Extensions.Pam.Utilities 1.0.0 — never published to NuGet registry ([4e4e1f5](https://github.com/Keyfactor/public-nuget-packages/commit/4e4e1f5b28dfed8c287f47a23e174730dae29d45))
+
 ## [1.7.1](https://github.com/Keyfactor/public-nuget-packages/compare/v1.7.0...v1.7.1) (2026-04-15)
 
 
