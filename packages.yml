@@ -64,6 +64,7 @@ packages:
       - 3.0.0
       - 3.1.0
       - 3.2.0
+      - 3.3.0
   - name: Keyfactor.Platform.IPAMProvider
     versions:
       - 1.0.0
