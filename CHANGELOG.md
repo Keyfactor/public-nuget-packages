@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/Keyfactor/public-nuget-packages/compare/v1.7.3...v1.8.0) (2026-06-29)
+
+
+### Features
+
+* **pkg:** Add `Keyfactor.AnyGateway.IAnyCAPlugin` `v3.3.0` ([300c7c0](https://github.com/Keyfactor/public-nuget-packages/commit/300c7c0e357bfd2d3d6f417f4051a26d8b2e052b))
+
 ## [1.7.3](https://github.com/Keyfactor/public-nuget-packages/compare/v1.7.2...v1.7.3) (2026-04-15)
 
 
