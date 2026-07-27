@@ -42,6 +42,7 @@ packages:
       - 8.1.1
       - 8.2.2
       - 8.3.1
+      - 8.4.0
   - name: Keyfactor.Orchestrators.IOrchestratorRegistrationUpdater
     versions:
       - 1.0.2
@@ -58,6 +59,8 @@ packages:
       - 2.9.0
       - 2.10.0
       - 2.11.0
+      - 2.12.0
+      - 2.12.1
   - name: Keyfactor.AnyGateway.IAnyCAPlugin
     versions:
       - 2.0.0
@@ -97,6 +100,7 @@ packages:
       - 2.4.0
       - 2.5.0
       - 2.6.0
+      - 3.0.0
   - name: Keyfactor.Workflows
     versions:
       - 1.0.0
@@ -108,6 +112,7 @@ packages:
       - 2.4.0
       - 2.5.0
       - 2.6.0
+      - 3.0.0
   - name: Keyfactor.Platform.IOrchestratorJobCompleteHandler
     versions:
       - 1.0.0.1
